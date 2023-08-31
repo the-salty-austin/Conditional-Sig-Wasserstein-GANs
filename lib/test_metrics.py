@@ -11,12 +11,17 @@ def acf_torch(x: torch.Tensor, max_lag: int, dim:Tuple[int]=(0, 1)) -> torch.Ten
     :param max_lag: int. specifies number of lags to compute the acf for
     :return: acf of x. [max_lag, D]
     """
+    # https://real-statistics.com/time-series-analysis/stochastic-processes/autocorrelation-function/
+    # print(f"acf_torch() - {x.shape[1]}")
+    if max_lag is None:
+        max_lag = min(128, x.shape[1])
+
     acf_list = list()
     x = x - x.mean((0, 1))
-    std = torch.var(x, unbiased=False, dim=(0, 1))
+    std = torch.var(x, unbiased=False, dim=(0, 1))  # s_0
     for i in range(max_lag):
         y = x[:, i:] * x[:, :-i] if i > 0 else torch.pow(x, 2)
-        acf_i = torch.mean(y, dim) / std
+        acf_i = torch.mean(y, dim) / std  # ACF_i = s_i / s_0
         acf_list.append(acf_i)
     if dim == (0, 1):
         return torch.stack(acf_list)
@@ -29,15 +34,25 @@ def cacf_torch(x, max_lag, dim=(0, 1)):
         return [list(x) for x in torch.tril_indices(n, n)]
 
     ind = get_lower_triangular_indices(x.shape[2])
+
+    # print(f"cacf_torch() - ind: {ind}")
+
     x = (x - x.mean(dim, keepdims=True)) / x.std(dim, keepdims=True)
     x_l = x[..., ind[0]]
     x_r = x[..., ind[1]]
+
+    # print( f"cacf_torch() x={x.shape}, l={x_l.shape}, r={x_r.shape}")
+
     cacf_list = list()
     for i in range(max_lag):
         y = x_l[:, i:] * x_r[:, :-i] if i > 0 else x_l * x_r
+        # print(f"cacf_torch() [{i}] x_l={x_l[:, i:].shape} * x_r={x_r[:, :-i].shape} = y.shape={y.shape}")
         cacf_i = torch.mean(y, (1))
+        # print("cacf_torch() cacf_i", cacf_i.shape)
         cacf_list.append(cacf_i)
     cacf = torch.cat(cacf_list, 1)
+    # print(f"cacf_torch() cacf.shape={cacf.shape}")
+    # print(f"cacf_torch() cacf.shape={ cacf.reshape(cacf.shape[0], -1, len(ind[0])).shape }")
     return cacf.reshape(cacf.shape[0], -1, len(ind[0]))
 
 

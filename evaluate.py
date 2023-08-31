@@ -50,9 +50,9 @@ def compute_test_metrics(x_fake, x_real):
 def get_algo_config(dataset, experiment_dir):
     key = dataset
     if dataset == 'VAR':
-        key += experiment_dir.split('/')[2][4]
+        key += experiment_dir.split('\\')[2][4]
     elif dataset == 'STOCKS':
-        key += '_' + experiment_dir.split('/')[2]
+        key += '_' + experiment_dir.split('\\')[2]
     sig_config = SIGCWGAN_CONFIGS[key]
     return sig_config
 

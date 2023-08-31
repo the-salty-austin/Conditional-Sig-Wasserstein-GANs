@@ -7,8 +7,7 @@ import torch
 def sample_indices(dataset_size, batch_size):
     indices = torch.from_numpy(np.random.choice(dataset_size, size=batch_size, replace=False)).cuda()
     # functions torch.-multinomial and torch.-choice are extremely slow -> back to numpy
-    return indices
-
+    return indices.long()
 
 def pickle_it(obj, filename):
     with open(filename, 'wb') as f:

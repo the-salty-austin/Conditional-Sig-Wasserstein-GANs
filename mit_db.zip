@@ -1,0 +1,1 @@
+<?xml version='1.0' encoding='UTF-8'?><Error><Code>UserProjectMissing</Code><Message>Bucket is a requester pays bucket but no user project provided.</Message><Details>Bucket is a requester pays bucket but no user project provided.</Details></Error>

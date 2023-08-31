@@ -1,11 +1,12 @@
 from os.path import join
+import os
 
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 from lib.test_metrics import *
-from lib.utils import to_numpy
+from lib.utils import to_numpy, pickle_it
 
 
 def set_style(ax):
@@ -76,7 +77,7 @@ def plot_summary(x_fake, x_real, max_lag=None, labels=None):
         max_lag = min(128, x_fake.shape[1])
 
     from lib.test_metrics import skew_torch, kurtosis_torch
-    dim = x_real.shape[2]
+    dim = x_real.shape[2]  # how many assets
     _, axes = plt.subplots(dim, 3, figsize=(25, dim * 5))
 
     if len(axes.shape) == 1:
@@ -85,6 +86,7 @@ def plot_summary(x_fake, x_real, max_lag=None, labels=None):
         x_real_i = x_real[..., i:i + 1]
         x_fake_i = x_fake[..., i:i + 1]
 
+        print(f"plot_summary() - dim={i} x_real_i.shape={x_real_i.shape} x_fake_i.shape={x_fake_i.shape}")
         compare_hists(x_real=to_numpy(x_real_i), x_fake=to_numpy(x_fake_i), ax=axes[i, 0])
 
         def text_box(x, height, title):
@@ -107,7 +109,7 @@ def plot_summary(x_fake, x_real, max_lag=None, labels=None):
         text_box(x_fake_i, 0.70, 'Generated')
 
         compare_hists(x_real=to_numpy(x_real_i), x_fake=to_numpy(x_fake_i), ax=axes[i, 1], log=True)
-        compare_acf(x_real=x_real_i, x_fake=x_fake_i, ax=axes[i, 2], max_lag=max_lag, CI=False, dim=(0, 1))
+        compare_acf(x_real=x_real_i, x_fake=x_fake_i, ax=axes[i, 2], max_lag=max_lag, CI=True, dim=(0, 1))
 
 
 def compare_cross_corr(x_real, x_fake):
@@ -141,9 +143,10 @@ def savefig(filename, directory):
     plt.close()
 
 
-def create_summary(dataset, device, G, lags_past, steps, x_real, one=False):
+def create_summary(dataset, device, G, lags_past, steps, x_real, experiment_directory, one=False):
     with torch.no_grad():
         x_past = x_real[:, :lags_past]
+        x_real_future = x_real[:, lags_past:]
         if dataset in ['STOCKS', 'ECG']:
             x_p = x_past.clone().repeat(5, 1, 1)
         else:
@@ -151,5 +154,15 @@ def create_summary(dataset, device, G, lags_past, steps, x_real, one=False):
         if one:
             x_p = x_p[:1]
         x_fake_future = G.sample(steps, x_p.to(device))
-        plot_summary(x_fake=x_fake_future, x_real=x_real, max_lag=3)
+
+        pickle_it(x_fake_future, join(experiment_directory, "x_fake_future.torch") )
+        random_indices = torch.randint(0, x_fake_future.shape[0], (250,))
+        for asset_i in range(x_fake_future.shape[2]):
+            plt.plot( torch.transpose( x_fake_future[random_indices, :, asset_i], 0, 1) , 'C%s' % asset_i, alpha=0.1)
+        plt.ylim( (-0.2,0.2) )
+        plt.savefig(os.path.join(experiment_directory, 'x_fake_future.png'))
+        plt.clf()
+
+        print(f"plot.py create_summary() x_real_future={x_real_future.shape} x_fake_future={x_fake_future.shape}")
+        plot_summary(x_fake=x_fake_future, x_real=x_real_future)
     return x_fake_future

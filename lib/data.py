@@ -1,11 +1,53 @@
 import os
 import pickle
-
+import datetime
 import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
 
+def transfer_percentage_seq(x):
+    # base value (t=0)
+    start = x[0,:]
+    start = start.expand(x.shape)
+    # remove zero start
+    idx_ = torch.nonzero(start == 0, as_tuple=False).tolist()
+    if idx_:
+        idx_ = idx_[0]
+    idx_ = list(set(list(range(x.shape[0]))) - set(idx_))
+
+    new_x = x[idx_, ...]
+    new_start = start[idx_, ...]
+
+    new_x = (new_x - new_start) / new_start
+    return new_x
+
+# def rolling_window(x, x_lag, add_batch_dim=True):
+#     if add_batch_dim:
+#         x = x[None, ...]
+#     return torch.cat([x[:, t:t + x_lag] for t in range(x.shape[1] - x_lag)], dim=0)
+
+def zero_based_rolling_window(x, p_lag, q_lag, add_batch_dim=True):
+    window = p_lag + q_lag
+    # print(window, x.shape, x.shape[0]-window)
+
+    combined_segments = []
+    for t in range(x.shape[0]-window):
+        # p_segment = x[t      :t+p_lag]
+        # p_segment = transfer_percentage_seq(p_segment)
+        # q_segment = x[t+p_lag:t+window]
+        # q_segment = transfer_percentage_seq(q_segment)
+
+        # combined_segment = torch.cat([p_segment, q_segment], dim=0)
+        # combined_segments.append(combined_segment)
+        segment = x[ t : t+p_lag+q_lag ]
+        combined_segment = transfer_percentage_seq(segment)
+        combined_segments.append(combined_segment)
+
+    if add_batch_dim:
+        return torch.stack(combined_segments)[None, ...]
+    
+    return torch.stack(combined_segments)
 
 class Pipeline:
     def __init__(self, steps):
@@ -55,12 +97,32 @@ def get_equities_dataset(assets=('SPX', 'DJI'), with_vol=True):
     start = '2005-01-01 00:00:00+01:00'
     end = '2020-01-01 00:00:00+01:00'
 
+    # if assets == ('SPX',):
+    #     df_asset = oxford[oxford['Symbol'] == '.SPX'].set_index(['Unnamed: 0'])  # [start:end]
+    #     price = np.log(df_asset[['close_price']].values)
+    #     rtn = (price[1:] - price[:-1]).reshape(1, -1, 1)
+    #     vol = np.log(df_asset[['medrv']].values[-rtn.shape[1]:]).reshape(1, -1, 1)
+        
+    #     if with_vol:
+    #         data_raw = np.concatenate([rtn, vol], axis=-1)
+    #     else:
+    #         data_raw = np.concatenate([rtn], axis=-1)
     if assets == ('SPX',):
         df_asset = oxford[oxford['Symbol'] == '.SPX'].set_index(['Unnamed: 0'])  # [start:end]
-        price = np.log(df_asset[['close_price']].values)
-        rtn = (price[1:] - price[:-1]).reshape(1, -1, 1)
-        vol = np.log(df_asset[['medrv']].values[-rtn.shape[1]:]).reshape(1, -1, 1)
-        data_raw = np.concatenate([rtn, vol], axis=-1)
+        price = df_asset[['close_price']].values
+        data_raw = np.concatenate([price], axis=-1)[None, ...]
+    # elif assets == ('SPX', 'DJI'):
+    #     df_spx = oxford[oxford['Symbol'] == '.SPX'].set_index(['Unnamed: 0'])[start:end]
+    #     df_dji = oxford[oxford['Symbol'] == '.DJI'].set_index(['Unnamed: 0'])[start:end]
+    #     index = df_dji.index.intersection(df_spx.index)
+    #     df_dji = df_dji.loc[index]
+    #     df_spx = df_spx.loc[index]
+    #     price_spx = np.log(df_spx[['close_price']].values)
+    #     rtn_spx = (price_spx[1:] - price_spx[:-1]).reshape(1, -1, 1)
+    #     vol_spx = np.log(df_spx[['medrv']].values).reshape(1, -1, 1)
+    #     price_dji = np.log(df_dji[['close_price']].values)
+    #     rtn_dji = (price_dji[1:] - price_dji[:-1]).reshape(1, -1, 1)
+    #     vol_dji = np.log(df_dji[['medrv']].values).reshape(1, -1, 1)
     elif assets == ('SPX', 'DJI'):
         df_spx = oxford[oxford['Symbol'] == '.SPX'].set_index(['Unnamed: 0'])[start:end]
         df_dji = oxford[oxford['Symbol'] == '.DJI'].set_index(['Unnamed: 0'])[start:end]
@@ -68,18 +130,48 @@ def get_equities_dataset(assets=('SPX', 'DJI'), with_vol=True):
         df_dji = df_dji.loc[index]
         df_spx = df_spx.loc[index]
         price_spx = np.log(df_spx[['close_price']].values)
-        rtn_spx = (price_spx[1:] - price_spx[:-1]).reshape(1, -1, 1)
-        vol_spx = np.log(df_spx[['medrv']].values).reshape(1, -1, 1)
         price_dji = np.log(df_dji[['close_price']].values)
-        rtn_dji = (price_dji[1:] - price_dji[:-1]).reshape(1, -1, 1)
-        vol_dji = np.log(df_dji[['medrv']].values).reshape(1, -1, 1)
-        data_raw = np.concatenate([rtn_spx, vol_spx[:, 1:], rtn_dji, vol_dji[:, 1:]], axis=-1)
+        data_raw = np.concatenate([price_spx, price_dji], axis=-1)[None, ...]
     else:
         raise NotImplementedError()
+
     data_raw = torch.from_numpy(data_raw).float()
-    pipeline = Pipeline(steps=[('standard_scale', StandardScalerTS(axis=(0, 1)))])
-    data_preprocessed = pipeline.transform(data_raw)
-    return pipeline, data_raw, data_preprocessed
+    # pipeline = Pipeline(steps=[('standard_scale', StandardScalerTS())])
+    # data_preprocessed = pipeline.transform(data_raw)
+    # return pipeline, data_raw, data_preprocessed
+    return data_raw
+
+
+def get_binance_dataset(assets=('BTC', 'ETH')):
+    datasets = []
+    start = datetime.datetime(1970,1,1)
+    end = datetime.datetime(2023,12,31)
+    
+    for asset in assets:
+        data_raw = pd.read_csv(f'.\\data\\binance\\{asset}USDT_1h.csv').set_index('Unnamed: 0')
+        data_raw['timestamp'] = pd.to_datetime(data_raw['timestamp'], format='%Y-%m-%d %H:%M:%S') 
+        data_raw = data_raw.set_index(['timestamp'])
+
+        # if data_raw.index[0] > start:
+        #     start = data.index[0]
+        # if data_raw.index[-1] < end:
+        #     end = data.index[-1]
+
+        data_raw = data_raw[start:end][["close"]].to_numpy(dtype='float')
+        data_raw = torch.FloatTensor(data_raw)
+
+        data = torch.FloatTensor(data_raw)
+        # data = rolling_window(data, 5, add_batch_dim=True)
+        # data = transfer_percentage_seq(data)
+
+        # print(data)
+
+        datasets.append(data)
+        print(f'\tRolled data for training, shape {list(data.shape)}')
+
+    data_processed = torch.cat(datasets, dim=-1)[None,:,:]
+
+    return data_processed
 
 
 def get_var_dataset(window_size, batch_size=5000, dim=3, phi=0.8, sigma=0.5):
@@ -145,17 +237,6 @@ def get_arch_dataset(window_size, lag=4, bt=0.055, N=5000, dim=1):
     return pipeline, data_raw, data_pre
 
 
-def load_pickle(path):
-    with open(path, 'rb') as f:
-        return pickle.load(f)
-
-
-def rolling_window(x, x_lag, add_batch_dim=True):
-    if add_batch_dim:
-        x = x[None, ...]
-    return torch.cat([x[:, t:t + x_lag] for t in range(x.shape[1] - x_lag)], dim=0)
-
-
 def get_mit_arrythmia_dataset(filenames):
     DATA_DIR = './data/mit-bih-arrhythmia-database-1.0.0/'
     import wfdb
@@ -171,12 +252,18 @@ def get_mit_arrythmia_dataset(filenames):
 
 
 def get_data(data_type, p, q, **data_params):
+    
+    print(f"get_data() - p={p} q={q} p+q={p+q}")
+
     if data_type == 'VAR':
         pipeline, x_real_raw, x_real = get_var_dataset(
             40000, batch_size=1, **data_params
         )
     elif data_type == 'STOCKS':
-        pipeline, x_real_raw, x_real = get_equities_dataset(**data_params)
+        # pipeline, x_real_raw, x_real = get_equities_dataset(**data_params)
+        x_real = get_equities_dataset(**data_params)
+    elif data_type == 'BINANCE':
+        x_real = get_binance_dataset(**data_params)
     elif data_type == 'ARCH':
         pipeline, x_real_raw, x_real = get_arch_dataset(
             40000, N=1, **data_params
@@ -185,8 +272,12 @@ def get_data(data_type, p, q, **data_params):
         pipeline, x_real_raw, x_real = get_mit_arrythmia_dataset(**data_params)
     else:
         raise NotImplementedError('Dataset %s not valid' % data_type)
+    
+    print("get_data() before rolling", x_real.shape)
+    # print(x_real)
     assert x_real.shape[0] == 1
-    x_real = rolling_window(x_real[0], p + q)
+    x_real = zero_based_rolling_window(x_real[0], p, q, add_batch_dim=False)
+    print("get_data() after rolling",  x_real.shape)
     return x_real
 
 
@@ -222,3 +313,17 @@ def download_mit_ecg_dataset():
     zf.extractall(path='./data')
     zf.close()
     os.remove('./mit_db.zip')
+
+
+if __name__ == "__main__":
+
+    # print("--------Below 2 are equivalent-------")
+    # pipeline, data_raw, data_preprocessed = get_arch_dataset(window_size=5)
+    # print(pipeline)
+    # print(data_preprocessed[0])
+    # print((data_raw[0] - torch.mean(data_raw, dim=(0,1))) / torch.std(data_raw, dim=(0,1)))
+    # print("--------Above 2 are equivalent-------")
+
+    res = get_data("BINANCE", 3, 10)
+    res = get_data("STOCKS", 13, 10)
+    # print(res)
