@@ -32,6 +32,9 @@ def get_standard_test_metrics(x):
         test_metrics['abs_metric'](x, reg=0.1),
         # test_metrics['acf_id'](x, max_lag=2, reg=0.3),
         test_metrics['acf_id'](x, max_lag=x.shape[1], reg=0.3),
+        test_metrics['skew'](x),
+        test_metrics['kurtosis'](x),
+        test_metrics['mean'](x),
     ]
     if is_multivariate(x):
         test_metrics_list.append(test_metrics['cross_correl'](x, reg=0.1))

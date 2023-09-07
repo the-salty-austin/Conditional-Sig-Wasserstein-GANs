@@ -195,8 +195,8 @@ if __name__ == '__main__':
     parser.add_argument('-batch_size', default=200, type=int)
     parser.add_argument('-p', default=24, type=int)
     parser.add_argument('-q', default= 6, type=int)
-    parser.add_argument('-hidden_dims', default=3 * (50,), type=tuple)
-    parser.add_argument('-total_steps', default=180, type=int)
+    parser.add_argument('-hidden_dims', default=3 * (50,), type=tuple)  # ArFNN generator
+    parser.add_argument('-total_steps', default=100, type=int)
 
     args = parser.parse_args()
     main(args)

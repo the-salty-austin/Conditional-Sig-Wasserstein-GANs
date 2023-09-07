@@ -56,10 +56,18 @@ class ArFNN(nn.Module):
     def forward(self, z, x_past):
         x_generated = list()
         for t in range(z.shape[1]):
+            # d=2, p=24
             z_t = z[:, t:t + 1]
+            # z_t:torch.Size([200000, 1, d=2])  x:torch.Size([200000, 1, p*d=48])
             x_in = torch.cat([z_t, x_past.reshape(x_past.shape[0], 1, -1)], dim=-1)
+            # x_in:torch.Size([200000, 1, d*(p+1)=50])
+            
+            # >>> ResFNN Generator <<<
             x_gen = self.network(x_in)
-            x_past = torch.cat([x_past[:, 1:], x_gen], dim=1)
+            # x_gen:torch.Size([200000, 1, d=2])
+            
+            x_past = torch.cat([x_past[:, 1:], x_gen], dim=1) # iterative replace and append
+            # x_past:torch.Size([200000, 1, p=24])
             x_generated.append(x_gen)
         x_fake = torch.cat(x_generated, dim=1)
         return x_fake
@@ -71,5 +79,9 @@ class SimpleGenerator(ArFNN):
         self.latent_dim = latent_dim
 
     def sample(self, steps, x_past):
+        '''
+        [Usage] generator.sample( q, x_past ) where x_past has length p.
+        '''
+        # self.latent_dim = d
         z = torch.randn(x_past.size(0), steps, self.latent_dim).to(x_past.device)
         return self.forward(z, x_past)
