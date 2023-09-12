@@ -5,4 +5,8 @@ __pycache__
 data/
 data/oxfordmanrealizedvolatilityindices.csv
 data/mit-bih-arrhythmia-database-1.0.0
-numerical_results/
+numerical_results/ARCH
+numerical_results/BINANCE/BTC
+numerical_results/BINANCE/ETH
+numerical_results/STOCKS
+numerical_results/VAR
